@@ -1,0 +1,81 @@
+---
+version: '3'
+
+volumes:
+  grafana-data:
+    driver: local
+  prometheus-data:
+    driver: local
+services:
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./Grafana/grafana:/etc/grafana
+      - ./Grafana/emails:/usr/share/grafana/public/emails
+      - ./Grafana/dashboards/home.json:/usr/share/grafana/public/dashboards/home.json
+    restart: unless-stopped
+    environment:
+      GF_RENDERING_SERVER_URL: http://renderer:8081/render
+      GF_RENDERING_CALLBACK_URL: http://grafana:3000/
+      GF_LOG_FILTERS: rendering:debug
+  renderer:
+    image: grafana/grafana-image-renderer:latest
+    ports:
+      - 8081
+    restart: unless-stopped
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    command: "--config.file=/etc/prometheus/prometheus.yaml"
+    volumes:
+      - ./prometheus_config/:/etc/prometheus/:ro
+      - prometheus-data:/prometheus
+    restart: unless-stopped
+  node_exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node_exporter
+    command: "--path.rootfs=/host"
+    pid: host
+    restart: unless-stopped
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - 9100:9100
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - 8080:8080
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg
+    privileged: true
+    restart: unless-stopped
+  pushgateway:
+    image: prom/pushgateway:v1.6.2
+    container_name: pushgateway
+    ports:
+      - 9091:9091
+    restart: unless-stopped
+  reporter:
+    image: grafana/report:latest
+    container_name: reporter
+    restart: unless-stopped
+    ports:
+      - "8686:8686"
+    environment:
+      - APIKEY=your_api_key_value  #once you got the Key Composer up again
+      - GRAFANA_PORT=grafana
+      - GRAFANA_HOST='3000'
+  #  network_mode: host
